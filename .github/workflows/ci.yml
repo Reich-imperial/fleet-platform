@@ -1,0 +1,30 @@
+# CI pipeline — runs on every push to main and every pull request
+# TODO: implement after the project boots locally
+#
+# Steps to plan:
+#   1. Checkout code
+#   2. Set up Node.js
+#   3. Install backend dependencies and run linter
+#   4. Install frontend dependencies and run build
+#   5. Run backend tests (once tests exist)
+#   6. Build Docker images
+#
+# Questions to think through before implementing:
+#   - How do you run Postgres in a GitHub Actions job for tests?
+#   - How do you cache node_modules to speed up the pipeline?
+#   - Which branch should trigger a deployment step?
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # TODO: add build, lint, and test steps

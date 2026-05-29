@@ -1,0 +1,90 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: Inter, system-ui, sans-serif;
+  font-weight: 400;
+}
+
+:root {
+  --color-page: #F4F4F2;
+  --color-surface: #FFFFFF;
+  --color-surface-strong: #F8F8F6;
+  --color-ink: #1A1A1A;
+  --color-muted: #6B6B68;
+  --color-line: #E5E5E3;
+}
+
+.dark {
+  --color-page: #101417;
+  --color-surface: #161C20;
+  --color-surface-strong: #1E272D;
+  --color-ink: #F2F5F4;
+  --color-muted: #AAB3B0;
+  --color-line: #2C363C;
+  color-scheme: dark;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 0.25s;
+  animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+@layer components {
+  .ops-card {
+    background: var(--color-surface);
+    border-color: var(--color-line);
+    @apply rounded-card border;
+  }
+
+  .ops-input {
+    background: var(--color-surface);
+    border-color: var(--color-line);
+    color: var(--color-ink);
+    @apply h-9 rounded-input border px-3 text-[13px] outline-none focus:border-primary;
+  }
+
+  .ops-button {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-input border border-primary bg-primary px-3 text-[13px] font-medium text-white;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .ops-button-secondary {
+    background: var(--color-surface);
+    border-color: var(--color-line);
+    color: var(--color-ink);
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-input border px-3 text-[13px] font-medium;
+  }
+
+  .ops-icon-tile {
+    @apply flex h-8 w-8 items-center justify-center rounded-input border;
+    background: var(--color-surface-strong);
+    border-color: var(--color-line);
+    color: var(--color-muted);
+  }
+}
