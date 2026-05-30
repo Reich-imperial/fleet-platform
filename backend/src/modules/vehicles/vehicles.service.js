@@ -11,8 +11,11 @@ const mapVehicle = (row) => ({
   model: row.model,
   year: row.year,
   type: row.type,
-  capacity: `${Number(row.capacity_litres).toLocaleString()} L`,
-  capacityLitres: Number(row.capacity_litres),
+  // Handle null capacity gracefully
+  capacity: row.capacity_litres
+    ? `${Number(row.capacity_litres).toLocaleString()} L`
+    : '—',
+  capacityLitres: row.capacity_litres ? Number(row.capacity_litres) : null,
   status: row.status,
   lastServiceDate: row.last_service_date,
 });
@@ -37,7 +40,7 @@ const createVehicle = async (data) => {
   const result = await pool.query(
     `
       INSERT INTO vehicles (registration_number, make, model, year, type, capacity_litres, status, last_service_date)
-      VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'available'), $8)
+      VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::vehicle_status, 'available'), $8)
       RETURNING *
     `,
     [
@@ -66,7 +69,7 @@ const updateVehicle = async (id, data) => {
         year = COALESCE($5, year),
         type = COALESCE($6, type),
         capacity_litres = COALESCE($7, capacity_litres),
-        status = COALESCE($8, status),
+        status = COALESCE($8::vehicle_status, status),
         last_service_date = COALESCE($9, last_service_date)
       WHERE id = $1
       RETURNING *

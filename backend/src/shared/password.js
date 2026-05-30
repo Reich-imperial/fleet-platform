@@ -1,26 +1,13 @@
 'use strict';
 
-const crypto = require('crypto');
+// Unified password hashing using bcryptjs.
+// All password operations go through here — never call bcrypt directly in services.
+const bcrypt = require('bcryptjs');
 
-const ITERATIONS = 120000;
-const KEY_LENGTH = 64;
-const DIGEST = 'sha512';
+const SALT_ROUNDS = 12;
 
-const hashPassword = (password) => {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.pbkdf2Sync(password, salt, ITERATIONS, KEY_LENGTH, DIGEST).toString('hex');
-  return `pbkdf2:${ITERATIONS}:${salt}:${hash}`;
-};
+const hashPassword = async (password) => bcrypt.hash(password, SALT_ROUNDS);
 
-const verifyPassword = (password, storedHash) => {
-  const [scheme, iterations, salt, hash] = storedHash.split(':');
-  if (scheme !== 'pbkdf2' || !iterations || !salt || !hash) return false;
-
-  const candidate = crypto
-    .pbkdf2Sync(password, salt, Number(iterations), KEY_LENGTH, DIGEST)
-    .toString('hex');
-
-  return crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(hash, 'hex'));
-};
+const verifyPassword = async (password, hash) => bcrypt.compare(password, hash);
 
 module.exports = { hashPassword, verifyPassword };

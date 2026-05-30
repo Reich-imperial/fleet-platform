@@ -1,29 +1,31 @@
-export const getTrips = async (params) => {
-  console.log('tripService.getTrips placeholder', params);
-  return [];
+import api from './api';
+
+export const getTrips = async () => {
+  const res = await api.get('/trips');
+  return res.data;
 };
 
 export const getTrip = async (id) => {
-  console.log('tripService.getTrip placeholder', id);
-  return null;
+  const res = await api.get(`/trips/${id}`);
+  return res.data;
 };
 
 export const createTrip = async (data) => {
-  console.log('tripService.createTrip placeholder', data);
-  return data;
+  const res = await api.post('/trips', data);
+  return res.data;
 };
 
 export const dispatchTrip = async (id) => {
-  console.log('tripService.dispatchTrip placeholder', id);
-  return { success: true };
+  const res = await api.post(`/trips/${id}/dispatch`);
+  return res.data;
 };
 
 export const completeTrip = async (id) => {
-  console.log('tripService.completeTrip placeholder', id);
-  return { success: true };
+  const res = await api.post(`/trips/${id}/complete`);
+  return res.data;
 };
 
 export const cancelTrip = async (id, reason) => {
-  console.log('tripService.cancelTrip placeholder', id, reason);
-  return { success: true };
+  const res = await api.post(`/trips/${id}/cancel`, { reason });
+  return res.data;
 };

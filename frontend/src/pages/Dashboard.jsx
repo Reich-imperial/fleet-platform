@@ -1,48 +1,121 @@
 import { AlertTriangle, Fuel, Gauge, Navigation, Truck } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import AlertItem from '../components/ui/AlertItem';
 import Badge from '../components/ui/Badge';
 import DataTable from '../components/ui/DataTable';
 import StatCard from '../components/ui/StatCard';
-
-const trips = [
-  { id: 'TRP-1048', route: 'Warri Depot -> Abuja', driver: 'K. Okafor', status: 'in_transit' },
-  { id: 'TRP-1049', route: 'Apapa Terminal -> Ibadan', driver: 'M. Bello', status: 'scheduled' },
-  { id: 'TRP-1050', route: 'Port Harcourt -> Enugu', driver: 'A. Danjuma', status: 'delivered' },
-  { id: 'TRP-1051', route: 'Kaduna Refinery -> Kano', driver: 'S. Musa', status: 'in_transit' },
-];
-
-const vehicles = [
-  { id: '1', reg: 'TKR-482-LA', model: 'Volvo FMX Tanker', capacity: '45,000 L', status: 'available' },
-  { id: '2', reg: 'TKR-231-RV', model: 'MAN TGS Tanker', capacity: '38,000 L', status: 'in_transit' },
-  { id: '3', reg: 'TRL-904-KD', model: 'Fuel Trailer', capacity: '50,000 L', status: 'maintenance' },
-];
+import api from '../services/api';
 
 const tripColumns = [
-  { key: 'id', header: 'Trip ID', sortable: true },
-  { key: 'route', header: 'Route', sortable: true },
-  { key: 'driver', header: 'Driver', sortable: true },
-  { key: 'status', header: 'Status', render: (value) => <Badge status={value} />, sortable: true },
+  { key: 'id',     header: 'Trip ID',  sortable: true },
+  { key: 'route',  header: 'Route',    sortable: true },
+  { key: 'driver', header: 'Driver',   sortable: true },
+  {
+    key: 'status', header: 'Status', sortable: true,
+    render: (value) => <Badge status={value} />,
+  },
 ];
 
 export default function Dashboard() {
+  const [summary, setSummary] = useState(null);
+  const [trips,   setTrips]   = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/dashboard/summary'),
+      api.get('/trips'),
+    ])
+      .then(([summaryRes, tripsRes]) => {
+        setSummary(summaryRes.data);
+        // Show only active trips on dashboard
+        setTrips(
+          (tripsRes.data || [])
+            .filter((t) => ['scheduled', 'in_transit'].includes(t.status))
+            .slice(0, 5)
+            .map((t) => ({
+              id:     t.id.slice(0, 8).toUpperCase(),
+              route:  t.route,
+              driver: t.driver,
+              status: t.status,
+            }))
+        );
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="ops-card h-24 animate-pulse bg-[var(--color-surface-2)]" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const fleet       = summary?.fleet        ?? { total: 0, available: 0, in_transit: 0, maintenance: 0 };
+  const activeTrips = summary?.activeTrips  ?? 0;
+  const fuel        = summary?.fuelThisMonth ?? { litres: 0, cost: 0 };
+  const alerts      = summary?.maintenanceAlerts ?? [];
+
+  const fuelLabel = fuel.litres >= 1000
+    ? `${(fuel.litres / 1000).toFixed(1)}k L`
+    : `${fuel.litres} L`;
+
   return (
     <div className="space-y-5">
+      {/* KPI cards */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total fleet" value="128" delta="+6 this quarter" deltaType="up" icon={Truck} />
-        <StatCard label="Active trips" value="34" delta="12 in transit" deltaType="neutral" icon={Navigation} />
-        <StatCard label="Fuel this month" value="284k L" delta="-3.8% variance" deltaType="down" icon={Fuel} />
-        <StatCard label="Open alerts" value="7" delta="3 critical" deltaType="down" icon={AlertTriangle} />
+        <StatCard
+          label="Total fleet"
+          value={fleet.total}
+          delta={`${fleet.available} available`}
+          deltaType="neutral"
+          icon={Truck}
+        />
+        <StatCard
+          label="Active trips"
+          value={activeTrips}
+          delta={`${fleet.in_transit} in transit`}
+          deltaType="neutral"
+          icon={Navigation}
+        />
+        <StatCard
+          label="Fuel this month"
+          value={fuelLabel}
+          delta={fuel.cost > 0 ? `₦${fuel.cost.toLocaleString()}` : 'No logs yet'}
+          deltaType="neutral"
+          icon={Fuel}
+        />
+        <StatCard
+          label="Open alerts"
+          value={alerts.length}
+          delta={alerts.length > 0 ? `${alerts.length} need attention` : 'All clear'}
+          deltaType={alerts.length > 0 ? 'down' : 'neutral'}
+          icon={AlertTriangle}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        {/* Active trips table */}
         <section>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-[16px] font-medium">Active trips</h2>
-            <button className="ops-button-secondary">Dispatch board</button>
           </div>
-          <DataTable columns={tripColumns} data={trips} />
+          {trips.length === 0 ? (
+            <div className="ops-card p-6 text-center text-[13px] text-[var(--color-muted)]">
+              No active trips
+            </div>
+          ) : (
+            <DataTable columns={tripColumns} data={trips} />
+          )}
         </section>
 
+        {/* Maintenance alerts */}
         <section className="ops-card overflow-hidden">
           <div className="flex items-center gap-2 border-b border-[var(--color-line)] px-3 py-2">
             <span className="ops-icon-tile">
@@ -50,32 +123,39 @@ export default function Dashboard() {
             </span>
             <h2 className="text-[16px] font-medium">Maintenance alerts</h2>
           </div>
-          <AlertItem severity="critical" title="TKR-231-RV brake inspection overdue" meta="Due 2 days ago" />
-          <AlertItem severity="warning" title="TRL-904-KD pressure valve service" meta="Next service in 48 hours" />
-          <AlertItem severity="info" title="TKR-482-LA calibration window" meta="Scheduled this week" />
+          {alerts.length === 0 ? (
+            <div className="p-4 text-[13px] text-[var(--color-muted)]">
+              No alerts — all vehicles up to date
+            </div>
+          ) : (
+            alerts.map((alert) => (
+              <AlertItem
+                key={alert.id}
+                severity="warning"
+                title={alert.registration_number}
+                meta={`Service due: ${new Date(alert.next_service_date).toLocaleDateString()}`}
+              />
+            ))
+          )}
         </section>
       </div>
 
+      {/* Fleet overview */}
       <section>
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-[16px] font-medium">Fleet overview</h2>
-          <button className="ops-button-secondary">View fleet</button>
+          <h2 className="text-[16px] font-medium">Fleet status</h2>
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {vehicles.map((vehicle) => (
-            <article key={vehicle.id} className="ops-card p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[13px] font-medium">{vehicle.reg}</div>
-                  <div className="mt-1 text-[12px] text-[var(--color-muted)]">{vehicle.model}</div>
-                </div>
-                <Badge status={vehicle.status} />
-              </div>
-              <div className="mt-4 flex items-center gap-2 border-t border-[var(--color-line)] pt-3 text-[12px] text-[var(--color-muted)]">
-                <Gauge size={14} />
-                Capacity <span className="text-[var(--color-ink)]">{vehicle.capacity}</span>
-              </div>
-            </article>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {[
+            { label: 'Available',      value: fleet.available,      color: 'var(--color-success)' },
+            { label: 'In transit',     value: fleet.in_transit,     color: 'var(--color-info)'    },
+            { label: 'Maintenance',    value: fleet.maintenance,    color: 'var(--color-warning)'  },
+            { label: 'Decommissioned', value: fleet.decommissioned, color: 'var(--color-muted)'   },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="ops-card p-4">
+              <div className="text-[11px] text-[var(--color-muted)]">{label}</div>
+              <div className="mt-1 text-[22px] font-medium" style={{ color }}>{value ?? 0}</div>
+            </div>
           ))}
         </div>
       </section>

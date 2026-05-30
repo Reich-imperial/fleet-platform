@@ -1,5 +1,8 @@
 'use strict';
 
+// Base error class — all application errors extend this.
+// The global error handler checks instanceof AppError to distinguish
+// known errors from unexpected runtime crashes.
 class AppError extends Error {
   constructor(message = 'An error occurred', httpStatus = 500, code = 'APP_ERROR') {
     super(message);
@@ -22,9 +25,17 @@ class NotFoundError extends AppError {
   }
 }
 
-class AuthError extends AppError {
+// AuthenticationError — who are you? (401)
+class AuthenticationError extends AppError {
   constructor(message = 'Authentication required') {
-    super(message, 401, 'AUTH_ERROR');
+    super(message, 401, 'UNAUTHENTICATED');
+  }
+}
+
+// AuthorizationError — I know who you are, but you can't do this (403)
+class AuthorizationError extends AppError {
+  constructor(message = 'Insufficient permissions') {
+    super(message, 403, 'FORBIDDEN');
   }
 }
 
@@ -34,10 +45,15 @@ class ConflictError extends AppError {
   }
 }
 
+// Keep AuthError as an alias so existing middleware doesn't break
+const AuthError = AuthenticationError;
+
 module.exports = {
   AppError,
   ValidationError,
   NotFoundError,
+  AuthenticationError,
+  AuthorizationError,
   AuthError,
   ConflictError,
 };

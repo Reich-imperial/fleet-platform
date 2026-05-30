@@ -1,18 +1,19 @@
-export const login = async (credentials) => {
-  console.log('authService.login placeholder', credentials);
+import api from './api';
 
-  return {
-    user: { id: 'ops-001', name: 'Depot Manager', role: 'admin', email: credentials.email },
-    accessToken: 'placeholder-token',
-  };
+// api interceptor already unwraps response.data
+// so api.post('/auth/login') returns { success, data: { accessToken, user } }
+export const login = async (credentials) => {
+  const res = await api.post('/auth/login', credentials);
+  // res is already response.data because of the interceptor
+  // shape: { success: true, data: { accessToken, user } }
+  return res.data ?? res;
 };
 
 export const logout = async () => {
-  console.log('authService.logout placeholder');
-  return { success: true };
+  await api.post('/auth/logout').catch(() => {});
 };
 
 export const refresh = async () => {
-  console.log('authService.refresh placeholder');
-  return { accessToken: 'placeholder-token' };
+  const res = await api.post('/auth/refresh');
+  return res.data ?? res;
 };
