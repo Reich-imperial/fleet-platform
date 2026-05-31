@@ -1,19 +1,7 @@
 import api from './api';
 
-// api interceptor already unwraps response.data
-// so api.post('/auth/login') returns { success, data: { accessToken, user } }
-export const login = async (credentials) => {
-  const res = await api.post('/auth/login', credentials);
-  // res is already response.data because of the interceptor
-  // shape: { success: true, data: { accessToken, user } }
-  return res.data ?? res;
-};
-
-export const logout = async () => {
-  await api.post('/auth/logout').catch(() => {});
-};
-
-export const refresh = async () => {
-  const res = await api.post('/auth/refresh');
-  return res.data ?? res;
-};
+// interceptor returns response.data = { success, data: { accessToken, user } }
+// so res.data gives us { accessToken, user }
+export const login  = async (creds) => { const r = await api.post('/auth/login', creds); return r.data; };
+export const logout = async ()       => { await api.post('/auth/logout').catch(() => {}); };
+export const refresh = async ()      => { const r = await api.post('/auth/refresh');      return r.data; };

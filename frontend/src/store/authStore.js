@@ -1,13 +1,11 @@
 import { create } from 'zustand';
 
 const storedToken = localStorage.getItem('access_token');
-const storedUser = localStorage.getItem('fleet_user');
+const storedUser  = localStorage.getItem('fleet_user');
 
 export const useAuthStore = create((set) => ({
-  token: storedToken,
-  user: storedUser
-    ? JSON.parse(storedUser)
-    : { id: 'ops-001', name: 'Depot Manager', role: 'admin' },
+  token: storedToken || null,
+  user:  storedUser ? JSON.parse(storedUser) : null,
 
   setAuth: (user, token) => {
     localStorage.setItem('access_token', token);

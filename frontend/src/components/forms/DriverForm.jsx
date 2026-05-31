@@ -1,14 +1,14 @@
 export default function DriverForm({ onSubmit, onCancel, saving, initialData = {} }) {
-  const submit = (event) => {
-    event.preventDefault();
-    onSubmit?.(Object.fromEntries(new FormData(event.currentTarget)));
+  const submit = (e) => {
+    e.preventDefault();
+    onSubmit?.(Object.fromEntries(new FormData(e.currentTarget)));
   };
 
   return (
     <form className="ops-card grid gap-3 p-4" onSubmit={submit}>
       <div className="grid grid-cols-2 gap-3">
-        <input className="ops-input" name="firstName" placeholder="First name" required defaultValue={initialData.firstName} />
-        <input className="ops-input" name="lastName" placeholder="Last name" required defaultValue={initialData.lastName} />
+        <input className="ops-input" name="firstName"     placeholder="First name"     required defaultValue={initialData.firstName} />
+        <input className="ops-input" name="lastName"      placeholder="Last name"      required defaultValue={initialData.lastName} />
         <input className="ops-input" name="licenseNumber" placeholder="License number" required defaultValue={initialData.licenseNumber} />
 
         <div className="flex flex-col gap-1">
