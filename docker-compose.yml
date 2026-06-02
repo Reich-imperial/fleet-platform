@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────
-# LEARNING TASK: You write this file.
+
 # This is your first real DevOps challenge in this project.
 #
 # Services to define: nginx, frontend, backend, postgres, redis
@@ -11,10 +11,6 @@
 #   - What port does each service expose to the host?
 #   - How do you pass environment variables from .env into the backend?
 #
-# Come back to Claude when you're ready to review your attempt.
-# ─────────────────────────────────────────────────────────────────
-
-version: '3.9'
 
 services:
   nginx:

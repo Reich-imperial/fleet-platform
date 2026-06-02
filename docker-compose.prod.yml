@@ -1,3 +1,78 @@
 # Production overrides — extends docker-compose.yml
 # TODO: implement after dev Compose is working
 # Think about: restart policies, no volume mounts, resource limits
+services:
+  nginx:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128m
+        reservations:
+          memory: 64m
+
+  frontend:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256m
+        reservations:
+          memory: 128m
+
+  backend:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512m
+        reservations:
+          memory: 256m
+
+  postgres:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512m
+        reservations:
+          memory: 256m
+
+  redis:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128m
+        reservations:
+          memory: 64m

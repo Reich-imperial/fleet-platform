@@ -7,13 +7,13 @@ const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@fleetops.local';
 const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'Password123!';
 
 const upsertUser = async (client, { email, password, role }) => {
-  const passwordHash = hashPassword(password);
+  const passwordHash = await hashPassword(password);
   const result = await client.query(
     `
       INSERT INTO users (email, password_hash, role)
       VALUES ($1, $2, $3)
       ON CONFLICT (email)
-      DO UPDATE SET role = EXCLUDED.role, is_active = TRUE
+      DO UPDATE SET role = EXCLUDED.role, password_hash = EXCLUDED.password_hash, is_active = TRUE
       RETURNING id, email, role
     `,
     [email, passwordHash, role]
