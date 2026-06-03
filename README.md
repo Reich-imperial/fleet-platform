@@ -30,9 +30,9 @@ Manages the full operational lifecycle of a petroleum logistics fleet:
 | Cache / Sessions | Redis 7 |
 | Reverse proxy | Nginx |
 | Containerisation | Docker + Docker Compose |
-| Infrastructure | AWS (Terraform) — Phase 5 |
-| CI/CD | GitHub Actions — Phase 6 |
-| Monitoring | Prometheus + Grafana — Phase 7 |
+| Infrastructure | AWS (Terraform) |
+| CI/CD | GitHub Actions — Phase 5 |
+| Monitoring | Prometheus + Grafana — Phase 6 |
 
 ---
 
@@ -59,7 +59,7 @@ All internal containers communicate over Docker's private network. PostgreSQL an
 | 1 | Application — auth, vehicles, drivers, trips, fuel, maintenance | ✅ Complete |
 | 2 | Docker Compose — full local stack, health checks, named volumes | ✅ Complete |
 | 3 | Manual AWS deployment — EC2, VPC, security groups, Docker on server | ✅ Complete |
-| 4 | Terraform — infrastructure as code for everything in Phase 3 | 🔄 In progress |
+| 4 | Terraform — infrastructure as code for everything in Phase 3 | ✅ Complete |
 | 5 | CI/CD — GitHub Actions, ECR, automated deploy on push | ⏳ Planned |
 | 6 | Monitoring — Prometheus + Grafana in the stack | ⏳ Planned |
 
@@ -168,7 +168,7 @@ Production runs the same Docker Compose stack on an AWS EC2 instance (`t3.small`
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
-Infrastructure will be fully codified in Terraform in Phase 4. See `/infra` for current work.
+Infrastructure is fully codified in Terraform. See `/infra` for the complete configuration.
 
 ---
 
@@ -231,3 +231,89 @@ Each phase is posted as a standalone article covering the decisions, mistakes, a
 Samson Ayodele — DevOps / Cloud Engineering  
 GitHub: [github.com/Reich-imperial](https://github.com/Reich-imperial)  
 Portfolio: [me.helixn8n.cfd](https://me.helixn8n.cfd)
+---
+
+## Infrastructure (Phase 4 — Terraform)
+
+All AWS infrastructure is defined as code in `/infra`. A single `terraform apply` provisions the complete environment with zero manual steps.
+
+### What Terraform creates
+
+| Resource | Configuration |
+|---|---|
+| VPC | `10.0.0.0/16`, DNS support and hostnames enabled |
+| Public subnet | `10.0.1.0/24` in `us-east-1a`, auto-assign public IP |
+| Internet gateway | Attached to VPC |
+| Route table | `0.0.0.0/0 → IGW`, associated to public subnet |
+| Security group | SSH restricted to deployer IP, HTTP/HTTPS open |
+| EC2 instance | `t3.small`, Amazon Linux 2023, 20GB gp3 encrypted EBS |
+
+### Bootstrap — what happens on first launch
+
+The EC2 instance runs a `user_data` script on first boot that fully configures the server without any manual intervention:
+
+1. System update and Docker installation
+2. Docker Compose plugin installed manually (not available via dnf on AL2023)
+3. Repository cloned from GitHub
+4. Backend `.env` file written with production values
+5. Full Docker Compose stack started (`docker-compose.yml` + `docker-compose.prod.yml`)
+6. Script waits for backend container to be healthy (retry loop, up to 20 attempts)
+7. Database migrations run
+8. Database seeded with initial data
+
+Bootstrap logs are written to `/var/log/user-data.log` on the server — check this first if anything goes wrong.
+
+### Remote state
+
+Terraform state is stored remotely in S3:
+bucket: terraform-state-samson-2tier
+key:    fleet-platform/terraform.tfstate
+region: us-east-1
+
+
+State is versioned — previous versions are recoverable if state is corrupted.
+
+### Deploy from scratch
+
+```bash
+# Prerequisites: AWS CLI configured, key pair .pem available
+
+cd infra
+
+# Inject real secret values (file is gitignored)
+./set-secrets.sh
+
+# Initialize and apply
+terraform init
+terraform plan
+terraform apply
+
+# SSH into the new instance
+ssh -i ~/.ssh/your-key.pem ec2-user@<ec2_public_ip>
+
+# Watch bootstrap progress
+sudo tail -f /var/log/user-data.log
+```
+
+### Tear down
+
+```bash
+cd infra
+terraform destroy
+```
+
+This removes all resources cleanly. EBS volume is deleted on termination. S3 state bucket is not managed by Terraform and is not destroyed.
+
+### Key engineering decisions
+
+**Why S3 remote state and not local?**
+Phase 5 (CI/CD) requires GitHub Actions to run Terraform commands. Local state lives on your machine — a pipeline can't access it. Remote state in S3 is a prerequisite for any automated deployment workflow, so it was set up in Phase 4 rather than migrated later.
+
+**Why user_data and not Ansible?**
+For a single server with a stable bootstrap sequence, `user_data` is the right tool. Ansible becomes worthwhile when you are configuring multiple servers or need idempotent re-runs. That complexity is not justified here.
+
+**Why placeholders for secrets in compute.tf?**
+JWT secrets and database credentials are injected locally via `infra/set-secrets.sh` before applying. The committed file contains placeholders. The production pattern for this is AWS SSM Parameter Store — the `user_data` script would fetch secrets at boot time using `aws ssm get-parameter`, keeping nothing sensitive in the codebase or Terraform state. SSM was intentionally deferred to keep Phase 4 focused on IaC fundamentals.
+
+**Why a retry loop instead of sleep for migrations?**
+A fixed `sleep` is a guess. If the backend takes longer than expected to start (slow image pull, resource contention), migrations run against a container that is not ready and fail silently. The retry loop polls the actual container health every 15 seconds for up to 5 minutes — it fails loudly if the backend never comes up rather than silently skipping migrations.
