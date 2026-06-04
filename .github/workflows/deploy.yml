@@ -1,0 +1,114 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 956867427400.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPOSITORY: fleet-platform
+
+jobs:
+  build:
+    name: Build and Push to ECR
+    runs-on: ubuntu-latest
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Generate image tag
+        id: meta
+        run: echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push backend image
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:backend-${{ steps.meta.outputs.tag }} \
+                       -t $ECR_REGISTRY/$ECR_REPOSITORY:backend-latest \
+                       ./backend
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:backend-${{ steps.meta.outputs.tag }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:backend-latest
+
+      - name: Build and push frontend image
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:frontend-${{ steps.meta.outputs.tag }} \
+                       -t $ECR_REGISTRY/$ECR_REPOSITORY:frontend-latest \
+                       ./frontend
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:frontend-${{ steps.meta.outputs.tag }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:frontend-latest
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get EC2 public IP
+        id: ec2
+        run: |
+          IP=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=fleet-platform-server" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text)
+
+          if [ "$IP" = "None" ] || [ -z "$IP" ]; then
+            echo "No running EC2 instance found. Run terraform apply first."
+            exit 1
+          fi
+
+          echo "ip=$IP" >> $GITHUB_OUTPUT
+          echo "Found EC2 at $IP"
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.ec2.outputs.ip }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Login to ECR
+            aws ecr get-login-password --region us-east-1 | \
+              docker login --username AWS --password-stdin \
+              956867427400.dkr.ecr.us-east-1.amazonaws.com
+
+            cd /home/ec2-user/fleet-platform
+
+            # Pull latest images
+            docker pull 956867427400.dkr.ecr.us-east-1.amazonaws.com/fleet-platform:backend-latest
+            docker pull 956867427400.dkr.ecr.us-east-1.amazonaws.com/fleet-platform:frontend-latest
+
+            # Restart stack with new images
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.ecr.yml up -d
+
+            # Run any pending migrations
+            docker compose exec -T backend npm run migrate
+
+            echo "Deploy complete"

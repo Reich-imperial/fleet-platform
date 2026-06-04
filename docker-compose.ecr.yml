@@ -1,0 +1,10 @@
+# ECR image override — used by CI/CD pipeline
+# Replaces local builds with pre-built images from Amazon ECR
+services:
+  backend:
+    image: 956867427400.dkr.ecr.us-east-1.amazonaws.com/fleet-platform:backend-latest
+    build: ~
+
+  frontend:
+    image: 956867427400.dkr.ecr.us-east-1.amazonaws.com/fleet-platform:frontend-latest
+    build: ~
