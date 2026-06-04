@@ -63,6 +63,10 @@ resource "aws_instance" "fleet_server" {
     database_url       = "REPLACE_WITH_DATABASE_URL"
   }))
 
+  lifecycle {
+    ignore_changes = [user_data]
+  }
+
   tags = {
     Name        = "${var.project_name}-server"
     Environment = var.environment
