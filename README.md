@@ -60,7 +60,7 @@ All internal containers communicate over Docker's private network. PostgreSQL an
 | 2 | Docker Compose — full local stack, health checks, named volumes | ✅ Complete |
 | 3 | Manual AWS deployment — EC2, VPC, security groups, Docker on server | ✅ Complete |
 | 4 | Terraform — infrastructure as code for everything in Phase 3 | ✅ Complete |
-| 5 | CI/CD — GitHub Actions, ECR, automated deploy on push | ⏳ Planned |
+| 5 | CI/CD — GitHub Actions, ECR, automated deploy on push | ✅ Complete |
 | 6 | Monitoring — Prometheus + Grafana in the stack | ⏳ Planned |
 
 ---
