@@ -49,6 +49,7 @@ resource "aws_instance" "fleet_server" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.fleet_sg.id]
   key_name               = var.key_pair_name
+  iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
 
   root_block_device {
     volume_size = 20
@@ -56,79 +57,45 @@ resource "aws_instance" "fleet_server" {
     encrypted   = true
   }
 
-  user_data = <<-USERDATA
-    #!/bin/bash
-    set -e
-    exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
-
-    echo "=== Starting Fleet Platform Bootstrap ==="
-
-    # System update and dependencies
-    dnf update -y
-    dnf install -y docker git
-
-    # Start and enable Docker
-    systemctl start docker
-    systemctl enable docker
-    usermod -aG docker ec2-user
-
-    # Install Docker Compose plugin
-    mkdir -p /usr/local/lib/docker/cli-plugins
-    curl -SL https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-linux-x86_64 \
-      -o /usr/local/lib/docker/cli-plugins/docker-compose
-    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-
-    # Clone the repository
-    cd /home/ec2-user
-    git clone https://github.com/Reich-imperial/fleet-platform.git
-    cd fleet-platform
-
-    # Write backend .env file
-    cat > backend/.env << 'ENVFILE'
-NODE_ENV=production
-PORT=3000
-DATABASE_URL=REPLACE_WITH_DATABASE_URL
-DB_POOL_MAX=10
-REDIS_URL=redis://redis:6379
-JWT_SECRET=REPLACE_WITH_JWT_SECRET
-JWT_ACCESS_EXPIRES=15m
-JWT_REFRESH_SECRET=REPLACE_WITH_JWT_REFRESH_SECRET
-JWT_REFRESH_EXPIRES=7d
-CORS_ORIGIN=*
-ENVFILE
-
-    # Fix ownership so ec2-user owns everything
-    chown -R ec2-user:ec2-user /home/ec2-user/fleet-platform
-
-    # Start the stack as ec2-user
-    sudo -u ec2-user docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-    # Wait for backend to be healthy before running migrations
-    echo "=== Waiting for backend to be ready ==="
-    RETRIES=20
-    COUNT=0
-    until sudo -u ec2-user docker compose exec -T backend node -e "console.log('ok')" > /dev/null 2>&1; do
-      COUNT=$((COUNT + 1))
-      if [ $COUNT -ge $RETRIES ]; then
-        echo "Backend did not become ready in time. Skipping migrations."
-        exit 1
-      fi
-      echo "Waiting for backend... attempt $COUNT/$RETRIES"
-      sleep 15
-    done
-
-    # Run migrations and seed
-    echo "=== Running migrations ==="
-    sudo -u ec2-user docker compose exec -T backend npm run migrate
-
-    echo "=== Running seed ==="
-    sudo -u ec2-user docker compose exec -T backend npm run seed
-
-    echo "=== Fleet Platform Bootstrap Complete ==="
-  USERDATA
+  user_data = base64encode(templatefile("${path.module}/bootstrap.sh", {
+    jwt_secret         = "REPLACE_WITH_JWT_SECRET"
+    jwt_refresh_secret = "REPLACE_WITH_JWT_REFRESH_SECRET"
+    database_url       = "REPLACE_WITH_DATABASE_URL"
+  }))
 
   tags = {
     Name        = "${var.project_name}-server"
     Environment = var.environment
   }
+}
+
+# IAM role for EC2 to pull from ECR
+resource "aws_iam_role" "ec2_role" {
+  name = "${var.project_name}-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+
+  tags = {
+    Name        = "${var.project_name}-ec2-role"
+    Environment = var.environment
+  }
+}
+
+# Attach ECR read policy to the role
+resource "aws_iam_role_policy_attachment" "ecr_read" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+# Instance profile wraps the role so EC2 can use it
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "${var.project_name}-ec2-profile"
+  role = aws_iam_role.ec2_role.name
 }
