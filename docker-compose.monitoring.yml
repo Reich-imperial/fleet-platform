@@ -2,6 +2,8 @@ services:
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: fleet-prometheus
+    ports:
+      - "9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -16,6 +18,8 @@ services:
   grafana:
     image: grafana/grafana:10.4.0
     container_name: fleet-grafana
+    ports:
+      - "3001:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -30,6 +34,8 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.7.0
     container_name: fleet-node-exporter
+    ports:
+      - "9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -45,6 +51,8 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: fleet-cadvisor
+    ports:
+      - "8080:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
