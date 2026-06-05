@@ -106,7 +106,7 @@ jobs:
             docker pull 956867427400.dkr.ecr.us-east-1.amazonaws.com/fleet-platform:frontend-latest
 
             # Restart stack with new images
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.ecr.yml up -d
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.ecr.yml -f docker-compose.monitoring.yml up -d
 
             # Run any pending migrations
             docker compose exec -T backend npm run migrate

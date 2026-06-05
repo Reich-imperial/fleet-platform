@@ -42,7 +42,8 @@ aws ecr get-login-password --region us-east-1 | \
 sudo -u ec2-user docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
-  -f docker-compose.ecr.yml up -d
+  -f docker-compose.ecr.yml \
+  -f docker-compose.monitoring.yml up -d
 
 echo "=== Waiting for backend to be ready ==="
 RETRIES=20
