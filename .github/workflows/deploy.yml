@@ -102,6 +102,7 @@ jobs:
             cd /home/ec2-user/fleet-platform
 
             # Pull latest images
+            git pull origin main
             docker pull 956867427400.dkr.ecr.us-east-1.amazonaws.com/fleet-platform:backend-latest
             docker pull 956867427400.dkr.ecr.us-east-1.amazonaws.com/fleet-platform:frontend-latest
 
