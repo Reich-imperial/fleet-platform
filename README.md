@@ -189,7 +189,7 @@ fleet-platform/
 │   │   ├── components/      # Shared UI components
 │   │   ├── pages/           # Route-level page components
 │   │   ├── api/             # Axios API client
-│   │   └── hooks/           # Custom React hooks
+│   │   └── hooks/           # Custom React hooksS
 │   └── nginx.conf           # SPA fallback config for React Router
 ├── nginx/
 │   └── nginx.conf           # Reverse proxy config
@@ -197,6 +197,8 @@ fleet-platform/
 ├── monitoring/              # Prometheus + Grafana (Phase 6)
 ├── docker-compose.yml       # Base Compose config
 └── docker-compose.prod.yml  # Production overrides
+|__ docker-compose.ecr.yml   # AWS ECR overrides [optional]
+|__ docker-compose.monitoring # Monitoring overrides
 ```
 
 ---
