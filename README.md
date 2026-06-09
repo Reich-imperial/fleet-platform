@@ -31,8 +31,8 @@ Manages the full operational lifecycle of a petroleum logistics fleet:
 | Reverse proxy | Nginx |
 | Containerisation | Docker + Docker Compose |
 | Infrastructure | AWS (Terraform) |
-| CI/CD | GitHub Actions — Phase 5 |
-| Monitoring | Prometheus + Grafana — Phase 6 |
+| CI/CD | GitHub Actions |
+| Monitoring | Prometheus + Grafana + Node Exporter + cAdvisor |
 
 ---
 
@@ -189,7 +189,7 @@ fleet-platform/
 │   │   ├── components/      # Shared UI components
 │   │   ├── pages/           # Route-level page components
 │   │   ├── api/             # Axios API client
-│   │   └── hooks/           # Custom React hooksS
+│   │   └── hooks/           # Custom React hooks
 │   └── nginx.conf           # SPA fallback config for React Router
 ├── nginx/
 │   └── nginx.conf           # Reverse proxy config
@@ -198,7 +198,7 @@ fleet-platform/
 ├── docker-compose.yml       # Base Compose config
 └── docker-compose.prod.yml  # Production overrides
 |__ docker-compose.ecr.yml   # AWS ECR overrides [optional]
-|__ docker-compose.monitoring # Monitoring overrides
+└── docker-compose.monitoring.yml  # Monitoring overrides
 ```
 
 ---
@@ -228,13 +228,6 @@ Each phase is posted as a standalone article covering the decisions, mistakes, a
 
 ---
 
-## Author
-
-Samson Ayodele — DevOps / Cloud Engineering  
-GitHub: [github.com/Reich-imperial](https://github.com/Reich-imperial)  
-Portfolio: [me.helixn8n.cfd](https://me.helixn8n.cfd)
----
-
 ## Infrastructure (Phase 4 — Terraform)
 
 All AWS infrastructure is defined as code in `/infra`. A single `terraform apply` provisions the complete environment with zero manual steps.
@@ -247,75 +240,227 @@ All AWS infrastructure is defined as code in `/infra`. A single `terraform apply
 | Public subnet | `10.0.1.0/24` in `us-east-1a`, auto-assign public IP |
 | Internet gateway | Attached to VPC |
 | Route table | `0.0.0.0/0 → IGW`, associated to public subnet |
-| Security group | SSH restricted to deployer IP, HTTP/HTTPS open |
+| Security group | SSH open, HTTP/HTTPS open |
 | EC2 instance | `t3.small`, Amazon Linux 2023, 20GB gp3 encrypted EBS |
+| IAM instance profile | Allows EC2 to authenticate to ECR without hardcoded credentials |
 
 ### Bootstrap — what happens on first launch
 
-The EC2 instance runs a `user_data` script on first boot that fully configures the server without any manual intervention:
+The EC2 runs `infra/bootstrap.sh` via `user_data` on first boot. Zero manual steps after `terraform apply`:
 
-1. System update and Docker installation
-2. Docker Compose plugin installed manually (not available via dnf on AL2023)
+1. System update, Docker and AWS CLI installation
+2. Docker Compose plugin installed manually — not available via dnf on AL2023
 3. Repository cloned from GitHub
-4. Backend `.env` file written with production values
-5. Full Docker Compose stack started (`docker-compose.yml` + `docker-compose.prod.yml`)
-6. Script waits for backend container to be healthy (retry loop, up to 20 attempts)
-7. Database migrations run
-8. Database seeded with initial data
+4. Backend `.env` written with production values via Terraform `templatefile()`
+5. ECR authentication — server uses IAM instance profile to pull images
+6. Full stack started — `docker-compose.yml` + `docker-compose.prod.yml` + `docker-compose.ecr.yml` + `docker-compose.monitoring.yml`
+7. Retry loop waits for backend container to be healthy — 20 attempts, 15 seconds apart
+8. Migrations run
+9. Database seeded
 
-Bootstrap logs are written to `/var/log/user-data.log` on the server — check this first if anything goes wrong.
+Bootstrap logs at `/var/log/user-data.log` — check here first if anything goes wrong.
+
+### What broke during Phase 4
+
+**Nested heredoc broke cloud-init**
+The original `user_data` used an inline heredoc with a nested `ENVFILE` heredoc inside it. Cloud-init silently dropped the entire script — the server booted clean with nothing installed. No error, no log, just a bare server.
+
+Fix: moved bootstrap to `infra/bootstrap.sh` and referenced it with `templatefile()`:
+
+```hcl
+user_data = base64encode(templatefile("${path.module}/bootstrap.sh", {
+  jwt_secret         = "..."
+  jwt_refresh_secret = "..."
+  database_url       = "..."
+}))
+```
+
+**`sleep 30` was a guess**
+The original migration step waited 30 seconds then ran migrations regardless of whether the backend was ready. If the backend was crash-looping, migrations ran against a dead container and failed silently.
+
+Fix: retry loop that actually checks container health:
+
+```bash
+until docker compose exec -T backend node -e "console.log('ok')" > /dev/null 2>&1; do
+  COUNT=$((COUNT + 1))
+  [ $COUNT -ge $RETRIES ] && exit 1
+  sleep 15
+done
+```
+
+**Secrets in Terraform files**
+JWT secrets and database credentials cannot be committed to git. Fix: `infra/set-secrets.sh` (gitignored) injects real values before apply. Committed file has placeholders.
+
+Production pattern: AWS SSM Parameter Store — `user_data` fetches secrets at boot via `aws ssm get-parameter`. Deferred to keep Phase 4 focused.
 
 ### Remote state
-
-Terraform state is stored remotely in S3:
 bucket: terraform-state-samson-2tier
 key:    fleet-platform/terraform.tfstate
 region: us-east-1
 
-
-State is versioned — previous versions are recoverable if state is corrupted.
+State is versioned — previous versions recoverable if corrupted.
 
 ### Deploy from scratch
 
 ```bash
-# Prerequisites: AWS CLI configured, key pair .pem available
-
 cd infra
-
-# Inject real secret values (file is gitignored)
-./set-secrets.sh
-
-# Initialize and apply
+./set-secrets.sh          # inject real secrets (gitignored)
 terraform init
 terraform plan
 terraform apply
-
-# SSH into the new instance
 ssh -i ~/.ssh/your-key.pem ec2-user@<ec2_public_ip>
-
-# Watch bootstrap progress
 sudo tail -f /var/log/user-data.log
 ```
 
 ### Tear down
 
 ```bash
-cd infra
-terraform destroy
+cd infra && terraform destroy
 ```
 
-This removes all resources cleanly. EBS volume is deleted on termination. S3 state bucket is not managed by Terraform and is not destroyed.
+EBS volume deleted on termination. S3 state bucket is unmanaged and not destroyed.
 
-### Key engineering decisions
+---
 
-**Why S3 remote state and not local?**
-Phase 5 (CI/CD) requires GitHub Actions to run Terraform commands. Local state lives on your machine — a pipeline can't access it. Remote state in S3 is a prerequisite for any automated deployment workflow, so it was set up in Phase 4 rather than migrated later.
+## CI/CD (Phase 5 — GitHub Actions)
 
-**Why user_data and not Ansible?**
-For a single server with a stable bootstrap sequence, `user_data` is the right tool. Ansible becomes worthwhile when you are configuring multiple servers or need idempotent re-runs. That complexity is not justified here.
+Every push to `main` builds and deploys automatically.
 
-**Why placeholders for secrets in compute.tf?**
-JWT secrets and database credentials are injected locally via `infra/set-secrets.sh` before applying. The committed file contains placeholders. The production pattern for this is AWS SSM Parameter Store — the `user_data` script would fetch secrets at boot time using `aws ssm get-parameter`, keeping nothing sensitive in the codebase or Terraform state. SSM was intentionally deferred to keep Phase 4 focused on IaC fundamentals.
+### Pipeline flow
+Push to main
+↓
+Build job
+→ Build backend Docker image
+→ Build frontend Docker image
+→ Tag with commit SHA + latest
+→ Push both to Amazon ECR
+↓
+Deploy job
+→ Query AWS for running EC2 by tag name (no hardcoded IP)
+→ SSH into server
+→ git pull origin main (sync new files)
+→ Pull new images from ECR
+→ Restart full stack
+→ Run migrations
 
-**Why a retry loop instead of sleep for migrations?**
-A fixed `sleep` is a guess. If the backend takes longer than expected to start (slow image pull, resource contention), migrations run against a container that is not ready and fail silently. The retry loop polls the actual container health every 15 seconds for up to 5 minutes — it fails loudly if the backend never comes up rather than silently skipping migrations.
+### IAM least privilege
+
+Pipeline uses a dedicated IAM user `fleet-github-actions` with only the permissions it needs:
+- `ecr:GetAuthorizationToken`
+- ECR push permissions scoped to the `fleet-platform` repository only
+- `ec2:DescribeInstances` to discover the server by tag
+
+Not admin. Not power user. Exactly what the pipeline needs.
+
+### EC2 discovery
+
+The pipeline never hardcodes the server IP. Every `terraform apply` gives a new IP. The pipeline queries AWS by tag:
+
+```bash
+IP=$(aws ec2 describe-instances   --filters     "Name=tag:Name,Values=fleet-platform-server"     "Name=instance-state-name,Values=running"   --query "Reservations[0].Instances[0].PublicIpAddress"   --output text)
+```
+
+If no running instance is found, the deploy job fails with a clear message: `No running EC2 instance found. Run terraform apply first.`
+
+### What broke during Phase 5
+
+**SSH key formatting corrupted by GitHub UI**
+Pasting the private key into the GitHub Secrets web interface stripped newlines. The pipeline could not parse it.
+
+Fix: used GitHub CLI to set the secret directly from the file:
+```bash
+gh secret set EC2_SSH_KEY < ~/.ssh/microsvc.pem
+```
+
+**Port 22 blocked for GitHub Actions runners**
+Security group restricted SSH to my IP only. GitHub Actions runs from GitHub's own IP ranges — completely different. Pipeline timed out on every SSH attempt.
+
+Fix: opened port 22 to `0.0.0.0/0`. Security comes from the key pair. Production alternative: AWS Systems Manager Session Manager — no SSH port needed at all.
+
+**EC2 had no ECR permissions**
+The server could not authenticate to ECR to pull images. Fix: IAM instance profile with `AmazonEC2ContainerRegistryReadOnly` attached to the EC2. Server authenticates via its role — no credentials anywhere.
+
+**`terraform apply` wanted to replace the EC2**
+Adding the IAM instance profile changed the EC2 resource. Terraform planned to destroy and recreate the server, wiping the database volumes.
+
+Fix: lifecycle block to ignore user_data changes on existing instances:
+```hcl
+lifecycle {
+  ignore_changes = [user_data]
+}
+```
+
+**New files never reached the server**
+The deploy script pulled Docker images from ECR but never ran `git pull`. Files like `docker-compose.monitoring.yml` existed in the repo but never appeared on the server.
+
+Fix: added `git pull origin main` to the deploy script before `docker compose up`.
+
+### What is not fully automated
+
+`terraform apply` remains manual. Automating infrastructure provisioning in the same pipeline as application deploys risks destroying database volumes on a bad push. Separating infrastructure changes (deliberate, manual) from application deploys (automatic, every push) is intentional.
+
+Production pattern: Terraform Cloud or Atlantis with approval gates and automated state snapshots before every apply.
+
+### GitHub Secrets required
+
+| Secret | Purpose |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | Pipeline AWS authentication |
+| `AWS_SECRET_ACCESS_KEY` | Pipeline AWS authentication |
+| `EC2_SSH_KEY` | SSH into EC2 for deploy |
+| `EC2_USER` | SSH username (`ec2-user`) |
+
+---
+
+## Monitoring (Phase 6 — Prometheus + Grafana)
+
+Four additional containers in `docker-compose.monitoring.yml`:
+
+| Container | Purpose |
+|---|---|
+| Prometheus | Scrapes and stores metrics every 15 seconds |
+| Grafana | Visualizes metrics as dashboards |
+| Node Exporter | Exposes EC2 host metrics — CPU, memory, disk, network |
+| cAdvisor | Exposes per-container metrics |
+
+### Accessing Grafana
+
+Grafana is not exposed to the public internet. Access via SSH tunnel:
+
+```bash
+ssh -i ~/.ssh/your-key.pem -L 3001:localhost:3001 ec2-user@<ec2_public_ip> -N
+```
+
+Then open `http://localhost:3001` in your browser.
+
+Default credentials: `admin` / `fleet_grafana_2024`
+
+**Why SSH tunnel and not public access?**
+Grafana exposes infrastructure internals — CPU patterns, memory usage, container names. Exposing this publicly creates both an information leak and an attack surface. The SSH tunnel gives secure access without opening any additional ports.
+
+Production alternatives: VPN access or Grafana Cloud.
+
+### Baseline metrics on t3.small running 9 containers
+
+| Metric | Value |
+|---|---|
+| CPU at idle | 1.6% |
+| RAM used | 44.8% |
+| Disk used | 6.2% |
+
+Per-container breakdown: Grafana and Prometheus are the heaviest memory consumers. cAdvisor uses the most CPU — it continuously inspects all running containers.
+
+### What is not monitored yet
+
+The backend has no `/metrics` endpoint. Prometheus cannot scrape application-level metrics — request rate, response times, error rates. Adding a Prometheus client library to the Node.js app and exposing a `/metrics` route is the next observability layer.
+
+Infrastructure metrics tell you the server is struggling. Application metrics tell you why.
+
+---
+
+## Author
+
+Samson Ayodele — DevOps / Cloud Engineering
+GitHub: [github.com/Reich-imperial](https://github.com/Reich-imperial)
+Portfolio: [me.helixn8n.cfd](https://me.helixn8n.cfd)
+LinkedIn: [linkedin.com/in/samson-olanipekun-devops](https://linkedin.com/in/samson-olanipekun-devops)
