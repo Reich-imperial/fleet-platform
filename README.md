@@ -1,5 +1,8 @@
 # Fleet Management Platform
 
+![Status](https://img.shields.io/badge/status-active--development-yellow)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 A production-style fleet management system for oil tanker and petroleum logistics operations. Built to practice and demonstrate real DevOps workflows — deployment, infrastructure as code, CI/CD pipelines, and observability.
 
 > The goal of this project is not the application itself but the infrastructure and engineering practices around it.
@@ -17,6 +20,8 @@ Manages the full operational lifecycle of a petroleum logistics fleet:
 - Maintenance log tracking with service intervals
 - Dashboard overview of fleet status, active trips, and recent activity
 - JWT authentication with refresh token rotation via Redis
+
+![FleetOps operations dashboard showing active trips, fleet overview, and maintenance alerts](./docs/screenshots/dashboard.png)
 
 ---
 
@@ -37,6 +42,8 @@ Manages the full operational lifecycle of a petroleum logistics fleet:
 ---
 
 ## Architecture
+
+![System architecture diagram: browser to Nginx reverse proxy to React frontend and Express backend to PostgreSQL and Redis](./docs/screenshots/architecture.png)
 
 ```
 Internet
@@ -196,8 +203,8 @@ fleet-platform/
 ├── infra/                   # Terraform (Phase 4)
 ├── monitoring/              # Prometheus + Grafana (Phase 6)
 ├── docker-compose.yml       # Base Compose config
-└── docker-compose.prod.yml  # Production overrides
-|__ docker-compose.ecr.yml   # AWS ECR overrides [optional]
+├── docker-compose.prod.yml  # Production overrides
+├── docker-compose.ecr.yml   # AWS ECR overrides [optional]
 └── docker-compose.monitoring.yml  # Monitoring overrides
 ```
 
@@ -326,6 +333,12 @@ EBS volume deleted on termination. S3 state bucket is unmanaged and not destroye
 
 Every push to `main` builds and deploys automatically.
 
+![GitHub Actions run showing Build and Push to ECR and Deploy to EC2 jobs both succeeding in 47s](./docs/screenshots/ci-pipeline-run.png)
+
+*A live pipeline run — build and deploy jobs completing in under a minute on a push to `main`.*
+
+![Amazon ECR repository showing frontend and backend images tagged and pushed](./docs/screenshots/ecr-images.png)
+
 ### Pipeline flow
 Push to main
 ↓
@@ -395,6 +408,18 @@ The deploy script pulled Docker images from ECR but never ran `git pull`. Files 
 
 Fix: added `git pull origin main` to the deploy script before `docker compose up`.
 
+### Targeted service restarts
+
+Not every backend change needs a full pipeline run. For quick logic changes during active development, a single service can be rebuilt and restarted directly on the server without touching the rest of the stack:
+
+![Terminal showing fleet-platform-backend-1 exited then restarted via docker compose up -d backend, with Redis and Postgres remaining healthy throughout](./docs/screenshots/backend-restart.png)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d backend
+```
+
+Only the backend container restarts — Redis, Postgres, Nginx, and the frontend stay up the whole time. This is a manual fast-path for iterating on backend logic; the GitHub Actions pipeline above is still the path for anything that should actually ship to `main`.
+
 ### What is not fully automated
 
 `terraform apply` remains manual. Automating infrastructure provisioning in the same pipeline as application deploys risks destroying database volumes on a bad push. Separating infrastructure changes (deliberate, manual) from application deploys (automatic, every push) is intentional.
@@ -422,6 +447,14 @@ Four additional containers in `docker-compose.monitoring.yml`:
 | Grafana | Visualizes metrics as dashboards |
 | Node Exporter | Exposes EC2 host metrics — CPU, memory, disk, network |
 | cAdvisor | Exposes per-container metrics |
+
+![Grafana cAdvisor dashboard showing per-container network traffic and container metadata for the fleet platform stack](./docs/screenshots/grafana-monitoring.png)
+
+cAdvisor covers per-container resource usage. Node Exporter covers the host itself — CPU, RAM, disk, and uptime for the underlying EC2 instance:
+
+![Node Exporter Full dashboard showing host-level CPU, RAM, disk, and network metrics](./docs/screenshots/node-exporter-dashboard.png)
+
+Together, the two dashboards answer different questions: cAdvisor shows which container is consuming resources, Node Exporter shows whether the host itself is under pressure.
 
 ### Accessing Grafana
 
@@ -455,6 +488,12 @@ Per-container breakdown: Grafana and Prometheus are the heaviest memory consumer
 The backend has no `/metrics` endpoint. Prometheus cannot scrape application-level metrics — request rate, response times, error rates. Adding a Prometheus client library to the Node.js app and exposing a `/metrics` route is the next observability layer.
 
 Infrastructure metrics tell you the server is struggling. Application metrics tell you why.
+
+---
+
+## Related projects
+
+[`fleet-gitops`](https://github.com/Reich-imperial/fleet-app) — the next chapter for this platform: taking the same application to Kubernetes with ArgoCD-driven GitOps deployment, namespace-level multi-tenancy, and CI security gating (SonarCloud, Snyk, Trivy). *(in progress)*
 
 ---
 
