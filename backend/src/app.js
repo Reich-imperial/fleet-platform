@@ -33,6 +33,11 @@ app.use('/api/v1/fuel',        fuelRoutes);
 app.use('/api/v1/maintenance', maintenanceRoutes);
 app.use('/api/v1/dashboard',   dashboardRoutes);
 
+// Health check endpoint - must be before 404 handler
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+}); 
+
 // 404 for unmatched routes
 app.use((_req, _res, next) => next(new NotFoundError('Route')));
 

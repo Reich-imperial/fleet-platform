@@ -58,9 +58,9 @@ resource "aws_instance" "fleet_server" {
   }
 
   user_data = base64encode(templatefile("${path.module}/bootstrap.sh", {
-    jwt_secret         = "REPLACE_WITH_JWT_SECRET"
-    jwt_refresh_secret = "REPLACE_WITH_JWT_REFRESH_SECRET"
-    database_url       = "REPLACE_WITH_DATABASE_URL"
+    jwt_secret         = "35b20aa5a41efc496a6b4123231f2206e6845908b63dcb74e2be5084b836c25209577e24045daf1f817b7e64d932f8a0127ff5687303f07fe943b693545f2b8f"
+    jwt_refresh_secret = "c155273e8f3a63a0a16cd8c18351a399b64c698f83b07396029e13668c24785fda128bb5c40087f825ebe8b2f58b4206bf7c5990a0897ab4f613b360b5628e12"
+    database_url       = "postgresql://fleet_user:fleet_pass@postgres:5432/fleet_db"
   }))
 
   lifecycle {

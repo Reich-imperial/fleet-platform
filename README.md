@@ -492,6 +492,7 @@ Infrastructure metrics tell you the server is struggling. Application metrics te
 ---
 
 ## Related projects
+[`k8s-learning`](https://github.com/Reich-imperial/k8s-learning) — this same application deployed to Kubernetes: Helm chart, EKS-specific values, AWS Load Balancer Controller with IRSA, and the EBS CSI driver.
 
 [`fleet-gitops`](https://github.com/Reich-imperial/fleet-app) — the next chapter for this platform: taking the same application to Kubernetes with ArgoCD-driven GitOps deployment, namespace-level multi-tenancy, and CI security gating (SonarCloud, Snyk, Trivy). *(in progress)*
 
