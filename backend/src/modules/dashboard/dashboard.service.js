@@ -6,12 +6,32 @@ const redis = require('../../config/redis');
 const CACHE_KEY = 'dashboard:summary';
 const CACHE_TTL = 60; // seconds
 
+// The dashboard, sidebar badge, and Alerts page all use this query so the
+// maintenance-due definition remains consistent everywhere it is displayed.
+const getMaintenanceAlerts = async () => {
+  const result = await pool.query(`
+    SELECT v.id, v.registration_number, m.next_service_date
+    FROM vehicles v
+    JOIN LATERAL (
+      SELECT next_service_date
+      FROM maintenance_logs
+      WHERE vehicle_id = v.id
+      ORDER BY performed_at DESC
+      LIMIT 1
+    ) m ON TRUE
+    WHERE m.next_service_date <= NOW() + INTERVAL '7 days'
+      AND v.deleted_at IS NULL
+    ORDER BY m.next_service_date ASC
+  `);
+  return result.rows;
+};
+
 const getSummary = async () => {
   // Return cached version if available — avoids hitting DB on every page load
   const cached = await redis.get(CACHE_KEY);
   if (cached) return JSON.parse(cached);
 
-  const [fleetResult, tripsResult, fuelResult, alertsResult] = await Promise.all([
+  const [fleetResult, tripsResult, fuelResult, maintenanceAlerts] = await Promise.all([
     // Fleet breakdown by status
     pool.query(`
       SELECT status, COUNT(*) AS count
@@ -36,21 +56,7 @@ const getSummary = async () => {
       WHERE created_at >= date_trunc('month', NOW())
     `),
 
-    // Maintenance alerts — vehicles with overdue or upcoming service (within 7 days)
-    pool.query(`
-      SELECT v.id, v.registration_number, m.next_service_date
-      FROM vehicles v
-      JOIN LATERAL (
-        SELECT next_service_date
-        FROM maintenance_logs
-        WHERE vehicle_id = v.id
-        ORDER BY performed_at DESC
-        LIMIT 1
-      ) m ON TRUE
-      WHERE m.next_service_date <= NOW() + INTERVAL '7 days'
-        AND v.deleted_at IS NULL
-      ORDER BY m.next_service_date ASC
-    `),
+    getMaintenanceAlerts(),
   ]);
 
   // Shape fleet status into a flat object
@@ -68,7 +74,7 @@ const getSummary = async () => {
       litres: Number(fuelResult.rows[0].total_litres),
       cost:   Number(fuelResult.rows[0].total_cost),
     },
-    maintenanceAlerts: alertsResult.rows,
+    maintenanceAlerts,
   };
 
   // Cache for 60 seconds
@@ -76,4 +82,18 @@ const getSummary = async () => {
   return summary;
 };
 
-module.exports = { getSummary };
+const getNavigationCounts = async () => {
+  const [tripsResult, maintenanceResult, maintenanceAlerts] = await Promise.all([
+    pool.query('SELECT COUNT(*) AS count FROM trips'),
+    pool.query('SELECT COUNT(*) AS count FROM maintenance_logs'),
+    getMaintenanceAlerts(),
+  ]);
+
+  return {
+    trips: Number(tripsResult.rows[0].count),
+    maintenance: Number(maintenanceResult.rows[0].count),
+    alerts: maintenanceAlerts.length,
+  };
+};
+
+module.exports = { getSummary, getMaintenanceAlerts, getNavigationCounts };

@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import AppShell from '../components/layout/AppShell';
 import { useAuthStore } from '../store/authStore';
 import Dashboard from '../pages/Dashboard';
+import Alerts from '../pages/Alerts';
 import Drivers from '../pages/Drivers';
 import FuelLogs from '../pages/FuelLogs';
 import Login from '../pages/Login';
@@ -47,6 +48,7 @@ export default function AppRouter() {
           />
           <Route path="fuel" element={<FuelLogs />} />
           <Route path="maintenance" element={<Maintenance />} />
+          <Route path="reports/alerts" element={<Alerts />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

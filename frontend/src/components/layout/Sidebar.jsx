@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -12,13 +13,14 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import api from '../../services/api';
 
 const groups = [
   {
     title: 'Operations',
     items: [
       { label: 'Dashboard', to: '/', icon: LayoutDashboard },
-      { label: 'Trips', to: '/trips', icon: Navigation, badge: 12, driver: true },
+      { label: 'Trips', to: '/trips', icon: Navigation, countKey: 'trips', driver: true },
       { label: 'Vehicles', to: '/vehicles', icon: Truck },
       { label: 'Drivers', to: '/drivers', icon: Users, adminOnly: true },
     ],
@@ -27,14 +29,14 @@ const groups = [
     title: 'Tracking',
     items: [
       { label: 'Fuel Logs', to: '/fuel', icon: Fuel },
-      { label: 'Maintenance', to: '/maintenance', icon: Wrench, badge: 4 },
+      { label: 'Maintenance', to: '/maintenance', icon: Wrench, countKey: 'maintenance' },
     ],
   },
   {
     title: 'Reports',
     items: [
       { label: 'Utilization', to: '/reports/utilization', icon: Gauge, adminOnly: true },
-      { label: 'Alerts', to: '/reports/alerts', icon: AlertTriangle, badge: 7 },
+      { label: 'Alerts', to: '/reports/alerts', icon: AlertTriangle, countKey: 'alerts' },
       { label: 'Audit', to: '/reports/audit', icon: ClipboardList, adminOnly: true },
     ],
   },
@@ -43,6 +45,13 @@ const groups = [
 export default function Sidebar() {
   const user = useAuthStore((state) => state.user);
   const role = user?.role ?? 'operator';
+  const [counts, setCounts] = useState({});
+
+  useEffect(() => {
+    api.get('/dashboard/navigation-counts')
+      .then((response) => setCounts(response.data || {}))
+      .catch(() => setCounts({}));
+  }, []);
 
   const visibleItems = (items) =>
     items.filter((item) => {
@@ -82,6 +91,7 @@ export default function Sidebar() {
               <div className="space-y-0.5">
                 {items.map((item) => {
                   const Icon = item.icon;
+                  const badge = item.countKey ? counts[item.countKey] : null;
 
                   return (
                     <NavLink
@@ -99,9 +109,9 @@ export default function Sidebar() {
                     >
                       <Icon size={15} strokeWidth={1.8} />
                       <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                      {item.badge ? (
+                      {typeof badge === 'number' ? (
                         <span className="rounded-badge bg-[var(--color-surface-strong)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
-                          {item.badge}
+                          {badge}
                         </span>
                       ) : null}
                     </NavLink>
