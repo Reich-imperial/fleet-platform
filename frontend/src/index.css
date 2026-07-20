@@ -80,6 +80,17 @@ textarea {
     color: var(--color-ink);
     @apply inline-flex h-9 items-center justify-center gap-2 rounded-input border px-3 text-[13px] font-medium;
   }
+  .ops-button-dispatch {
+    background: theme('colors.primary.light');
+    color: theme('colors.primary.dark');
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-input border border-primary px-3 text-[13px] font-medium;
+    @apply disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .ops-button-complete {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-input border border-success bg-success px-3 text-[13px] font-medium text-white;
+    @apply disabled:cursor-not-allowed disabled:opacity-60;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
 
   .ops-icon-tile {
     @apply flex h-8 w-8 items-center justify-center rounded-input border;

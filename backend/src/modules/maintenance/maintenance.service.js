@@ -1,6 +1,7 @@
 'use strict';
 
 const pool = require('../../config/database');
+const { NotFoundError } = require('../../shared/errors');
 
 const mapMaintenance = (row) => ({
   id: row.id,
@@ -18,17 +19,27 @@ const mapMaintenance = (row) => ({
   loggedBy: row.logged_by,
 });
 
-const listMaintenanceLogs = async () => {
+const listMaintenanceLogs = async (vehicleId) => {
+  const values = [];
+  const filter = vehicleId ? 'WHERE m.vehicle_id = $1' : '';
+  if (vehicleId) values.push(vehicleId);
   const result = await pool.query(`
     SELECT m.*, v.registration_number, v.status AS vehicle_status
     FROM maintenance_logs m
     JOIN vehicles v ON v.id = m.vehicle_id
+    ${filter}
     ORDER BY m.performed_at DESC
-  `);
+  `, values);
   return result.rows.map(mapMaintenance);
 };
 
 const createMaintenanceLog = async (data, userId) => {
+  const vehicle = await pool.query(
+    'SELECT id FROM vehicles WHERE id = $1 AND deleted_at IS NULL',
+    [data.vehicleId]
+  );
+  if (!vehicle.rows[0]) throw new NotFoundError('Vehicle');
+
   const result = await pool.query(
     `
       INSERT INTO maintenance_logs (
