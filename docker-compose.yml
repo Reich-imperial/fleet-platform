@@ -35,13 +35,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
   backend:
     build: ./backend
     ports:
       - "3000:3000"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/v1/auth/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5
