@@ -1,7 +1,7 @@
 'use strict';
 
 const pool = require('../../config/database');
-const { NotFoundError } = require('../../shared/errors');
+const { NotFoundError, ValidationError } = require('../../shared/errors');
 
 const mapVehicle = (row) => ({
   id: row.id,
@@ -59,6 +59,17 @@ const createVehicle = async (data) => {
 
 const updateVehicle = async (id, data) => {
   await getVehicle(id);
+
+  if (data.status !== undefined) {
+    const activeTrip = await pool.query(
+      "SELECT id FROM trips WHERE vehicle_id = $1 AND status = 'in_transit' LIMIT 1",
+      [id]
+    );
+    if (activeTrip.rows[0]) {
+      throw new ValidationError('Vehicle status cannot be changed while it has an in-transit trip. Resolve the trip first.');
+    }
+  }
+
   const result = await pool.query(
     `
       UPDATE vehicles

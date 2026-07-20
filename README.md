@@ -106,7 +106,7 @@ Default credentials after seeding:
 
 | Email | Password | Role |
 |---|---|---|
-| admin@fleetops.local | Password123! | Admin |
+| admin@fleet.com | Test1234! | Admin |
 | driver@fleetops.local | Password123! | Driver |
 
 ---

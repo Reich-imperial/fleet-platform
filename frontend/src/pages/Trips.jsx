@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, Send } from 'lucide-react';
 import TripForm from '../components/forms/TripForm';
 import Badge from '../components/ui/Badge';
 import DataTable from '../components/ui/DataTable';
@@ -103,8 +104,10 @@ export default function Trips() {
             <button
               className="ops-button-dispatch"
               disabled={isLoading}
+              title="Dispatch trip"
               onClick={(e) => handleAction(e, dispatchTrip, row.id)}
             >
+              <Send size={13} strokeWidth={2} />
               {isLoading ? 'Dispatching...' : 'Dispatch'}
             </button>
           );
@@ -114,8 +117,10 @@ export default function Trips() {
             <button
               className="ops-button-complete"
               disabled={isLoading}
+              title="Complete trip"
               onClick={(e) => handleAction(e, completeTrip, row.id)}
             >
+              <CheckCircle2 size={14} strokeWidth={2} />
               {isLoading ? 'Completing...' : 'Complete'}
             </button>
           );

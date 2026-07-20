@@ -109,9 +109,20 @@ const updateDriver = async (id, data) => {
 };
 
 const deleteDriver = async (id) => {
-  await getDriver(id);
-  await pool.query('UPDATE drivers SET deleted_at = NOW() WHERE id = $1', [id]);
-  return { id };
+  const driver = await getDriver(id);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE drivers SET deleted_at = NOW() WHERE id = $1', [id]);
+    await client.query('UPDATE users SET is_active = FALSE WHERE id = $1', [driver.userId]);
+    await client.query('COMMIT');
+    return { id };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
 module.exports = { listDrivers, getDriver, createDriver, updateDriver, deleteDriver };
